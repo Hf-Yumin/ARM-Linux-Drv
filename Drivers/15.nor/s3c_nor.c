@@ -1,0 +1,95 @@
+#include <linux/module.h>
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/slab.h>
+#include <linux/device.h>
+#include <linux/platform_device.h>
+#include <linux/mtd/mtd.h>
+#include <linux/mtd/map.h>
+#include <linux/mtd/partitions.h>
+#include <asm/io.h>
+
+static struct map_info *s3c_nor_map;
+static struct mtd_info *s3c_nor_mtd;
+
+static struct mtd_partition s3c_nor_parts[] = {
+	{
+		.name = "bootloader_nor",
+		.offset = 0,
+		.size = 0x40000,
+	},
+	{
+		.name = "root_nor",
+		.offset = MTDPART_OFS_APPEND,
+		.size = MTDPART_SIZ_FULL,
+	}
+};
+
+static int __init s3c_nor(void)
+{
+	int err = 0;
+	
+	s3c_nor_map = kzalloc(sizeof(struct map_info), GFP_KERNEL);
+	if(!s3c_nor_map)
+		{
+			err = -ENOMEM;
+			goto out1;
+		}
+	
+	s3c_nor_map->name = "s3c_nor";
+	s3c_nor_map->phys = 0;
+	s3c_nor_map->size = 0x1000000;
+	s3c_nor_map->bankwidth = 2;
+	s3c_nor_map->virt = ioremap(s3c_nor_map->phys, s3c_nor_map->size);
+	if(!s3c_nor_map->virt)
+		{
+			err = -EIO;
+			goto out2;
+		}
+	
+	simple_map_init(s3c_nor_map);
+	
+	printk("use cfi_probe\n");
+	s3c_nor_mtd = do_mtd_probe("cfi_probe", s3c_nor_map);
+	if(!s3c_nor_mtd)
+		{
+			printk("use jedec_probe\n");
+			s3c_nor_mtd = do_mtd_probe("jedec_probe", s3c_nor_map);
+			if(!s3c_nor_mtd)
+				{
+					err = -ENXIO;
+					goto out3;
+				}
+		}
+	s3c_nor_mtd->owner = THIS_MODULE;
+	
+	add_mtd_partitions(s3c_nor_mtd, s3c_nor_parts, 2);
+	return 0;
+
+out3:
+	map_destroy(s3c_nor_mtd);
+	iounmap(s3c_nor_map->virt);
+out2:
+	kfree(s3c_nor_map);
+out1:
+	return err;
+}
+
+static void __exit s3c_nor_exit(void)
+{
+	if(s3c_nor_mtd)
+		{
+			del_mtd_partitions(s3c_nor_mtd);
+			map_destroy(s3c_nor_mtd);
+		}
+	if(s3c_nor_map)
+		{
+			iounmap(s3c_nor_map->virt);
+			kfree(s3c_nor_map);
+		}
+}
+
+module_init(s3c_nor_init);
+module_exit(s3c_nor_exit);
+MODULE_LICENSE("GPL");
