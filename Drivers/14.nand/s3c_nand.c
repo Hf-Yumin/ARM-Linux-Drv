@@ -70,9 +70,34 @@ static struct mtd_partition s3c_nand_parts[] = {
 	}
 };
 
-s3c2440_select_chip;
-s3c2440_cmd_ctrl;   
-s3c2440_dev_ready;  
+static void s3c2440_select_chip(struct mtd_info *mtd, int chipnr)
+{
+	if(chipnr == -1)
+		{
+			s3c_nand_regs->nfcont |= (1<<1);
+		}
+	else
+		{
+			s3c_nand_regs->nfcont &= ~(1<<1);
+		}
+}
+
+static void s3c2440_cmd_ctrl(struct mtd_info *mtd, int dat, unsigned int ctrl)
+{
+	if(ctrl & NAND_CLE)
+		{
+			s3c_nand_regs->nfcmd = dat;
+		}
+	else
+		{
+			s3c_nand_regs->nfaddr = dat;
+		}
+}
+
+static void s3c2440_dev_ready(struct mtd_info *mtd)
+{
+	return(s3c_mtd_regs->nfstat & (1<<0));
+}
 
 static int s3c_nand_init(void)
 {
@@ -155,3 +180,7 @@ static void __exit s3c_nand_exit(void)
 	iounmap(s3c->regs);
 	kfree(s3c_mtd);
 }
+
+module_init(s3c_nand_init);
+module_exit(s3c_nand_exit);
+MODULE_LICENSE("GPL");
